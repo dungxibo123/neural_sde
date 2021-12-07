@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchsde
+from torchsde import sdeint_adjoint as sdeint
 from torchdiffeq import odeint_adjoint as odeint
 
 import sys
@@ -31,56 +32,69 @@ class Model(nn.Module):
         running_loss /= count
         
         return running_loss,acc
-    def loss_surface(self):
-        pass
 
-def F(nn.Module):
-    def __init__(self,state_size, input_size, output_size, hidden_sizes): 
-        hidden_sizes.reverse(); hidden_sizes.append(input_size); hidden_sizes.reverse(); hidden_sizes.append(output_size)
-        layers = []
-        for i in range(1, len(hidden_sizes)):
-            layers.append(hidden_sizes[i - 1], hidden_sizes[i])
-            layers.append(nn.ReLU())
-        self.net = nn.Sequential(*layers)
+
+class F(nn.Module):
+    def __init__(self,in_hidden,out_hidden): 
+        super(F,self).__init__()
+        self.net = nn.Sequential(*[
+            nn.Linear(in_hidden,8),
+            nn.ReLU(),
+            nn.Linear(8,16),
+            nn.ReLU(),
+            nn.Linear(16,32),
+            nn.ReLU(),
+            nn.Linear(32,16),
+            nn.ReLU(),
+            nn.Linear(16,8),
+            nn.ReLU(),
+            nn.Linear(8,out_hidden),
+            nn.ReLU(),
+
+        ])
     def forward(self,x):
         return self.net(x)
 
-def G(nn.Module):
-    def __init__(self, input_size, output_size, hidden_sizes): 
-        hidden_sizes.reverse(); hidden_sizes.append(input_size); hidden_sizes.reverse(); hidden_sizes.append(output_size)
-        layers = []
-        for i in range(1, len(hidden_sizes)):
-            layers.append(hidden_sizes[i - 1], hidden_sizes[i])
-            layers.append(nn.ReLU())
-        self.net = nn.Sequential(*layers)
+class G(nn.Module):
+    def __init__(self, in_hidden, out_hidden): 
+        super(G,self).__init__()
+        self.net = nn.Sequential(*[
+            nn.Linear(in_hidden, 128),
+            nn.ReLU(),
+            nn.Linear(128,64),
+            nn.ReLU(),
+            nn.Linear(64,out_hidden),
+            nn.ReLU()
+        ])
     def forward(self,x):
         return self.net(x)
 class SDEBlock(nn.Module):
     noise_type="general"
     sde_type="ito"
-    def __init__(self, state_size, brownian_size, batch_size, drift_hidden, diffusion_hidden,config = dict(), device="cpu", parallel=False):
+    def __init__(self, state_size, brownian_size, batch_size, option = dict(), device="cpu", parallel=False,
+        method="euler", noise_type="general", integral_type="ito"):
         super(SDEBlock, self).__init__()
+        self.noise_type=noise_type
+        self.sde_type=integral_type
         self.state_size = state_size
-        self.batch_szie = batch_size
+        self.batch_size = batch_size
         self.brownian_size = brownian_size
         self.parallel = parallel
+        
         if not parallel:
-            self.f = F(state_size,state_size, drift_hidden)
-            self.g = G(state_size, state_size * brownian_size)
+            self.drift = F(state_size, state_size).to(device)
+            self.diffusion = G(state_size, state_size * brownian_size).to(device)
         else:
-            self.f = torch.nn.DataParallel(F(state_size,state_size, drift_hidden))
-            
-            self.g = torch.nn.DataParallel(G(state_size, state_size * brownian_size))
+            self.drift = torch.nn.DataParallel(F(state_size,state_size)).to(device) 
+            self.diffusion = torch.nn.DataParallel(G(state_size, state_size * brownian_size)).to(device)
 
-
-    def f(self,t,x): 
-        return self.f.module(x) if self.parallel else self.f(x)
+    def f(self,t,x):  
+        out = self.drift(x)
+        return out
+        #return self.f(x)
     def g(self,t,x):
-        if parallel:
-            out = self.g.module(x)
-        else:
-            out = self.g.module(x)
-        return out.view(batch_size, state_size, brownian_size)
+        out = self.diffusion(x)
+        return out.view(self.batch_size, self.state_size, self.brownian_size)
 
 
         
@@ -94,13 +108,86 @@ SDENet: fe -> SDEBlock -> fcc
 """
     
     
-
 class SDENet(nn.Module):
-    def __init__(self, input_size, state_size, brownian_size, drift_hidden, diffusion_hidden, sde_config = dict(), device = "cpu", parallel = False):
-    super(SDENet, self).__init__()
+    def __init__(self, input_channel, input_size, state_size, brownian_size, batch_size, option = dict(), method="euler",
+        noise_type="general", integral_type="ito", device = "cpu", parallel = False):
+        """"""""""""""""""""""""
+        super(SDENet, self).__init__()
+        self.batch_size = batch_size
+        self.parallel = parallel
+        self.option = option
+        state_size = 64 * 6 * 6
+        self.fe = nn.Sequential(*[
+            nn.Conv2d(input_channel,16,3,1),
+            nn.GroupNorm(8,16),
+            nn.ReLU(),
+            nn.Conv2d(16,32,3,2),
+            nn.GroupNorm(16,32),
+            nn.ReLU(),
+            nn.Conv2d(32,64,3,2),
+            nn.GroupNorm(32,64),
+            nn.ReLU(),
+
+        ]).to(device)
+        # Output shape from (B,3,32,32) -> (B,64,6,6)
+        if parallel:
+            self.rm = nn.DataParallel(
+                SDEBlock(
+                    state_size=state_size,
+                    brownian_size = brownian_size,
+                    batch_size = batch_size,
+                #    drift_hidden=drift_hidden,
+                #    diffusion_hidden=diffusion_hidden,
+                    option=option,
+                    device=device,
+                    parallel=parallel
+                )
+            ).to(device)
+        else:
+            self.rm = SDEBlock(
+                    state_size=state_size,
+                    brownian_size = brownian_size,
+                    batch_size = batch_size,
+                    option=option,
+                    method=method,
+                    integral_type=integral_type,
+                    noise_type=noise_type,
+                    device=device,
+                    parallel=parallel
+                ).to(device)
+
+
+        self.fcc = nn.Sequential(*[
+            nn.Linear(state_size,10),
+            nn.Softmax(dim = 1)
+        ]).to(device)
+
+
+        self.intergrated_time = torch.Tensor([0.0,1.0]).to(device)
+        self.device = device
+        self.method = method
+    def forward(self,x):
+        out = self.fe(x)
+#        print(f"Shape after Feature Extraction Layer: {out.shape}")
+        out = out.view(self.batch_size,-1)
+#        print(f"Shape before the SDE Intergral: {out.shape}")
+        if self.parallel:
+            out = sdeint(self.rm.module,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2,dt=0.1, min_dt=0.05)[-1]
+        else:
+            out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2,dt=0.1, dt_min=0.05)[-1]
+        out = self.fcc(out)
+        return out
 
 
 
+# Test
+#sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
+#data = torch.rand((32,3,32,32)).to("cuda")
+#print(sde(data).shape)
 
 
-
+# Test 2
+#f = F(2304,16)
+#print(f(torch.rand(32,2304)).shape) # OK, SHAPE: [32,16]
+#g = G(2304,16 * 3)
+#print(g(torch.rand(32,2304)).shape) # OK, SHAPE: [32,48]

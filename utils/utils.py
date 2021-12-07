@@ -24,7 +24,7 @@ def add_noise(converted_data, sigma = 10,device="cpu"):
                                                   torch.ones(converted_data.shape) * sigma).to(device)
     #pertubed_data = torch.tensor(random_noise(converted_data.cpu(), mode='gaussian', mean=0, var=sigma**2, clip=False)).float().to(device)
     return pertubed_data
-def preprocess_data(data, shape = (28,28), sigma=None,device="cpu", train=False):
+def preprocess_data(data, data_type="svhn", sigma=None,device="cpu", train=False):
     if not train:
         #assert type(sigma) == type(list()) or type(sigma) == type(None), f"if train=False, the type(sigma) must be return a list object or NoneType object, but return {type(sigma)}"
         X = []
@@ -32,8 +32,9 @@ def preprocess_data(data, shape = (28,28), sigma=None,device="cpu", train=False)
         ds = {}
         sigma_noise = [50.,75.,100.]
         for data_idx, (x,y) in list(enumerate(data)):
-            #X.append(np.array(x).reshape((3,shape[0],shape[0])))
-            X.append(np.array(x).transpose(2,0,1)) # Change the shape from (H,W,C) -> (C,H,W)
+            if data_type=="mnist": X.append(np.array(x).reshape((1,28,28)))
+ 
+            else: X.append(np.array(x).transpose(2,0,1)) # Change the shape from (H,W,C) -> (C,H,W)
             Y.append(y)
         y_data = F.one_hot(torch.Tensor(Y).to(torch.int64), num_classes=10)
         y_data = y_data.to(device)
@@ -56,8 +57,9 @@ def preprocess_data(data, shape = (28,28), sigma=None,device="cpu", train=False)
         Y = []
         for data_idx, (x, y) in list(enumerate(data)):
             std = random.choice(sigma)
-            noise_x = (np.array(x) + np.random.normal(np.zeros_like(np.array(x)), np.ones_like(np.array(x)) * std))
-            X.append(noise_x.transpose(2,0,1))
+            noise_x = (np.array(x) + np.random.normal(np.zeros_like(np.array(x)), np.ones_like(np.array(x)) * std)) / 255.0
+            if data_type == "mnist": X.append(noise_x.reshape(1,28,28))
+            else: X.append(noise_x.transpose(2,0,1))
             Y.append(y)
         y_data = F.one_hot(torch.Tensor(Y).to(torch.int64), num_classes=10)
         y_data = y_data.to(device)

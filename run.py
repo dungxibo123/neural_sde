@@ -19,14 +19,19 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-d", "--device", type=str, default="cpu", help="Device which the PyTorch run on")
 parser.add_argument("-bs", "--batch-size", type=int, default=1024, help="Batch size of 1 iteration")
 parser.add_argument("-ep", "--epochs", type=int, default=200, help="Numbers of epoch")
-parser.add_argument("-f", "--folder", type=str, default="./data/mnist", help="Folder /path/to/mnist/dataset")
+parser.add_argument("-da", "--data", type=str, default="svhn", help="cifar10/svhn/mnist")
 parser.add_argument("-r", "--result", type=str, default="./result", help="Folder where the result going in")
 parser.add_argument("-tr", "--train", type=int, default=20000, help="Number of train images")
 parser.add_argument("-vl", "--valid", type=int, default=5000, help="Number of validation images")
 parser.add_argument("-lr", "--learning-rate",type=float, default=1e-3, help="Learning rate in optimizer")
 parser.add_argument("-md", "--model", type=str, default="./model", help="Where model going to")
 parser.add_argument("-pr", "--parallel", type=bool, default=False, help="Parallel or not")
-parser.add_argument("-wd", "--weight-decay", type=float, default=0.1, help="Weight decay")
+parser.add_argument("-wd", "--weight-decay", type=float, default=5e-3, help="Weight decay")
+parser.add_argument("-br", "--brownian-size", type=int, default=2, help="Brownian size")
+parser.add_argument("-nt", "--noise-type", type=str, default="general", help="Type of noise")
+parser.add_argument("-it", "--integral-type", type=str, default="ito", help="Ito or Stratonovich intergral")
+parser.add_argument("-so", "--solver", type=str, default="euler", help="Solver")
+parser.add_argument("-rlr", "--reduce-lr",type=float, default=0.1, help="Reduce On Plateau")
 args = parser.parse_args()
 
 
@@ -35,14 +40,19 @@ device = args.device
 #torch.device("cuda")
 EPOCHS=args.epochs
 BATCH_SIZE=args.batch_size
-DATA_DIR=args.folder
+DATA_DIR=f"./data/{args.data}"
+DATA_TYPE=args.data
 RESULT_DIR=args.result
 TRAIN_NUM=args.train
 VALID_NUM=args.valid
-#TEST_NUM=60000-TRAIN_NUM-VALID_NUM
+TEST_NUM=50000-TRAIN_NUM-VALID_NUM
 DATA_DISTRIBUTION=[TRAIN_NUM,VALID_NUM,TEST_NUM]
 MODEL_DIR=args.model
 PARALLEL=args.parallel
+INTEGRAL_TYPE=args.integral_type
+SOLVER=args.solver
+BROWNIAN_SIZE=args.brownian_size
+NOISE_TYPE=args.noise_type
 WEIGHT_DECAY=args.weight_decay
 
 
@@ -104,6 +114,51 @@ def train_model(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler
 
 
 
-def main(ds_len, train_ds, valid_ds,model_type = "ode",data_name = "mnist_50",batch_size=32,epochs=100, lr=1e-3,train_num = 0, valid_num = 0, test_num = 0, weight_decay=None, device="cpu", result_dir="./result", model_dir="./model", parallel=None):
+def main(ds_len, train_ds, valid_ds, model_type = "sde", data_name = "mnist_50", batch_size=32, epochs=100, lr=1e-3,
+    train_num = 0, valid_num = 0, test_num = 0, weight_decay=None, device="cpu", result_dir="./result", model_dir="./model",
+    integral_type="ito", brownian_size=2, noise_type="general", parallel=None, option=dict(), brownian_size=2):
+    # START THE MAIN PART
+########################################################################################################################
+    train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size, drop_last=True)
+    val_loader  = DataLoader(valid_ds, shuffle=True, batch_size= batch_size * 16, drop_last=True)
+    loss_fn = torch.nn.functional.binary_cross_entropy_with_logits
+    if parallel:
+        epochs= int(epochs * 2.5)
+        model = SDENet(
+            input_channel=3,
+            input_size=32,
+            brownian_size=brownian_size,
+            batch_size=batch_size,
+            option=option,
+            parallel=parallel,
+            device=device
+        ).to(device)
+        model = nn.DataParallel(model).to(device)
 
-    pass
+
+
+DATA = None
+if DATA_TYPE == "cifar10":
+    DATA = torchvision.datasets.CIFAR10(DATA_DIR, download=True)
+elif DATA_TYPE == "mnist":
+    DATA = torchvision.datasets.MNIST(DATA_DIR,
+                                   train=True,
+                                   transform=None,
+                                   target_transform=None, download=True)
+elif DATA_TYPE=="svhn":
+    DATA = torchvision.datasets.SVHN(DATA_DIR,download=True)
+    
+
+ds_len_, ds_ = preprocess_data(DATA,data_type=DATA_TYPE,device=device, sigma=None)
+_, perturbed_ds_ = preprocess_data(DATA,data_type=DATA_TYPE, device=device, sigma=[15.])
+#sigmas = [0.0,1e-5,10.0, 15.0,20.0]
+#loaders = [(key,DataLoader(preprocess_data(SVHN, sigma=[key,key], device=device, train=True)[1], batch_size=12000)) for key in sigma]
+sde_model = main( ds_len_, ds_, perturbed_ds_, device=device, model_type="sde", data_name=f"svhn_origin", batch_size=BATCH_SIZE, 
+    epochs=EPOCHS, train_num=TRAIN_NUM, valid_num=VALID_NUM, test_num=TEST_NUM, result_dir=RESULT_DIR, parallel=PARALLEL, integral_type=INTEGRAL_TYPE, solver=SOLVER, noise_type=NOISE_TYPE, weight_decay=WEIGHT_DECAY)
+"""
+if isinstance(sde_model, nn.DataParallel): sde_model = sde_model.module
+for k,l in loaders:
+    _, sde_acc = sde_model.evaluate(l)
+    print(f"SDEs for {k}-gaussian-pertubed SVHN = {sde_acc}")
+
+"""
