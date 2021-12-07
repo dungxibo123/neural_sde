@@ -115,26 +115,38 @@ def train_model(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler
 
 
 def main(ds_len, train_ds, valid_ds, model_type = "sde", data_name = "mnist_50", batch_size=32, epochs=100, lr=1e-3,
-    train_num = 0, valid_num = 0, test_num = 0, weight_decay=None, device="cpu", result_dir="./result", model_dir="./model",
-    integral_type="ito", brownian_size=2, noise_type="general", parallel=None, option=dict(), brownian_size=2):
+    train_num = 0, valid_num = 0, test_num = 0, weight_decay=0,reduce_lr = None, device="cpu", result_dir="./result", model_dir="./model",
+    integral_type="ito", brownian_size=2, noise_type="general", parallel=None, option=dict()):
     # START THE MAIN PART
 ########################################################################################################################
     train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size, drop_last=True)
     val_loader  = DataLoader(valid_ds, shuffle=True, batch_size= batch_size * 16, drop_last=True)
     loss_fn = torch.nn.functional.binary_cross_entropy_with_logits
+    #    epochs= int(epochs * 2.5)
+    model = SDENet(
+        input_channel=3,
+        input_size=32,
+        brownian_size=brownian_size,
+        batch_size=batch_size,
+        option=option,
+        parallel=parallel,
+        device=device
+    ).to(device)
     if parallel:
-        epochs= int(epochs * 2.5)
-        model = SDENet(
-            input_channel=3,
-            input_size=32,
-            brownian_size=brownian_size,
-            batch_size=batch_size,
-            option=option,
-            parallel=parallel,
-            device=device
-        ).to(device)
         model = nn.DataParallel(model).to(device)
-
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    if reduce_lr:
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,"min")
+   
+    history, best_model, best_epoch, best_acc = train(model=model,
+                                                      train_loader=train_loader,
+                                                      val_loader=val_loader,
+                                                      loss_fn=loss_fn,
+                                                      epochs=epochs,
+                                                      lr_scheduler=
+                                                      lr_scheduler,
+                                                      parallel=parallel)
+    return best_model
 
 
 DATA = None

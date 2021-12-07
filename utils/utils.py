@@ -20,8 +20,8 @@ def save_result(his, model_name = "ode",ds_name="mnist_0", result_dir="./result"
         json.dump(his, fo, indent=4)
 
 def add_noise(converted_data, sigma = 10,device="cpu"):
-    pertubed_data = converted_data + torch.normal(torch.zeros(converted_data.shape),
-                                                  torch.ones(converted_data.shape) * sigma).to(device)
+    pertubed_data = converted_data + torch.normal(torch.zeros_like(converted_data),
+                                                  torch.ones_like(converted_data) * sigma).to(device)
     #pertubed_data = torch.tensor(random_noise(converted_data.cpu(), mode='gaussian', mean=0, var=sigma**2, clip=False)).float().to(device)
     return pertubed_data
 def preprocess_data(data, data_type="svhn", sigma=None,device="cpu", train=False):
@@ -32,9 +32,9 @@ def preprocess_data(data, data_type="svhn", sigma=None,device="cpu", train=False
         ds = {}
         sigma_noise = [50.,75.,100.]
         for data_idx, (x,y) in list(enumerate(data)):
-            if data_type=="mnist": X.append(np.array(x).reshape((1,28,28)))
+            if data_type=="mnist": X.append(np.array(x).reshape((1,28,28)) / 255.0)
  
-            else: X.append(np.array(x).transpose(2,0,1)) # Change the shape from (H,W,C) -> (C,H,W)
+            else: X.append(np.array(x).transpose(2,0,1) / 255.0) # Change the shape from (H,W,C) -> (C,H,W)
             Y.append(y)
         y_data = F.one_hot(torch.Tensor(Y).to(torch.int64), num_classes=10)
         y_data = y_data.to(device)
@@ -44,7 +44,7 @@ def preprocess_data(data, data_type="svhn", sigma=None,device="cpu", train=False
             x_noise_data = add_noise(x_data, sigma=sigma, device=device) / 255.0
             print(f"Generating {sigma}-pertubed-dataset")
         else:
-            x_noise_data = x_data
+            x_noise_data = x_data / 255.0
             print(f"Generating {sigma}-pertubed-dataset")
 
         pertubed_ds = TensorDataset(x_noise_data,y_data)
