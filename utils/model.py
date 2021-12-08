@@ -34,9 +34,9 @@ class Model(nn.Module):
         return running_loss,acc
 
 
-class Drift(nn.Module):
-    def __init__(self,in_hidden,out_hidden, device="cuda"): 
-        super(Drift,self).__init__()
+class LinearDrift(nn.Module):
+    def __init__(self,in_hidden,out_hidden, device="cpu"): 
+        super(LinearDrift,self).__init__()
         self.net = nn.Sequential(*[
             nn.Linear(in_hidden,8),
             nn.ReLU(),
@@ -55,9 +55,9 @@ class Drift(nn.Module):
     def forward(self,x):
         return self.net(x)
 
-class Diffusion(nn.Module):
-    def __init__(self, in_hidden, out_hidden, device="cuda"): 
-        super(Diffusion,self).__init__()
+class LinearDiffusion(nn.Module):
+    def __init__(self, in_hidden, out_hidden, device="cpu"): 
+        super(LinearDiffusion,self).__init__()
         self.net = nn.Sequential(*[
             nn.Linear(in_hidden, 128),
             nn.ReLU(),
@@ -68,11 +68,57 @@ class Diffusion(nn.Module):
         ]).to(device)
     def forward(self,x):
         return self.net(x)
+
+class ConvolutionDrift(nn.Module):
+    def __init__(self, in_channel, size=32, device="cpu"):
+        super(ConvolutionDrift,self).__init__()
+        self.size=size
+        self.in_channel=in_channel
+        self.net = nn.Sequential(*[
+            nn.Conv2d(in_channel, 64,3,1),
+            nn.GroupNorm(32,64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64,3,1),
+            nn.GroupNorm(32,64),
+            nn.ReLU(),
+            nn.Conv2d(64, in_channel,3,1),
+            nn.ReLU(),
+            
+        ]).to(device)
+    def forward(self,x):
+        bs = x.shape[0]
+        out = x.view(bs,self.in_channel, self.size, self.size)
+        out = self.net(x)
+        out = out.view(bs,-1)
+        return out
+class ConvolutionDiffusion(nn.Module):
+    def __init__(self, in_channel, size=32, device="cpu"):
+        super(ConvolutionDiffusion,self).__init__()
+        self.size=size
+        self.in_channel=in_channel
+        self.net = nn.Sequential(*[
+            nn.Conv2d(in_channel, 64,3,1),
+            nn.GroupNorm(32,64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64,3,1),
+            nn.GroupNorm(32,64),
+            nn.ReLU(),
+            nn.Conv2d(64, in_channel,3,1),
+            nn.ReLU(),
+            
+        ]).to(device)
+    def forward(self,x):
+        bs = x.shape[0]
+        out = x.view(bs,self.in_channel, self.size, self.size)
+        out = self.net(x)
+        out = out.view(bs,-1)
+        return out
+        
 class SDEBlock(nn.Module):
     noise_type="general"
     sde_type="ito"
     def __init__(self, state_size, brownian_size, batch_size, option = dict(), device="cpu", parallel=False,
-        method="euler", noise_type="general", integral_type="ito"):
+        method="euler", noise_type="general", integral_type="ito", is_ode=False, layers="linear"):
         super(SDEBlock, self).__init__()
         self.noise_type=noise_type
         self.sde_type=integral_type
@@ -83,8 +129,14 @@ class SDEBlock(nn.Module):
         if parallel:
             self.batch_size = int(self.batch_size / 2)
         
-        self.drift = Drift(state_size, state_size).to(device)
-        self.diffusion = Diffusion(state_size, state_size * brownian_size).to(device)
+        if layers=="linear":
+            self.drift = LinearDrift(state_size, state_size).to(device)
+            self.diffusion = LinearDiffusion(state_size, state_size * brownian_size).to(device)
+
+        elif layers="conv":
+            self.drift = ConvolutionDrift(3, self.size).to(device)
+            self.diffusion = ConvolutionDiffusion(state_size, state_size * brownian_size).to(device)
+
 
     def f(self,t,x):  
         out = self.drift(x)
@@ -92,8 +144,11 @@ class SDEBlock(nn.Module):
         #return self.f(x)
     def g(self,t,x):
         out = self.diffusion(x)
-        return out.view(self.batch_size, self.state_size, self.brownian_size)
-
+        
+        out =  out.view(self.batch_size, self.state_size, self.brownian_size)
+        if self.is_ode:
+            out =  torch.zeros_like(out).to(out.device)
+        return out
 
         
 
@@ -101,14 +156,14 @@ class SDEBlock(nn.Module):
    
 
 """
-SDEBlock: Drift dx + Diffusion dW
+SDEBlock: LinearDrift dx + LinearDiffusion dW
 SDENet: fe -> SDEBlock -> fcc
 """
     
     
 class SDENet(Model):
     def __init__(self, input_channel, input_size, state_size, brownian_size, batch_size, option = dict(), method="euler",
-        noise_type="general", integral_type="ito", device = "cpu", parallel = False):
+        noise_type="general", integral_type="ito", device = "cpu", is_ode=False,parallel = False):
         """"""""""""""""""""""""
         super(SDENet, self).__init__()
         self.batch_size = batch_size
@@ -139,7 +194,9 @@ class SDENet(Model):
                 integral_type=integral_type,
                 noise_type=noise_type,
                 device=device,
-                parallel=parallel
+                parallel=parallel,
+                is_ode=is_ode,
+                layers="conv"
             ).to(device)
 
 
@@ -171,7 +228,13 @@ class SDENet(Model):
 
 
 # Test 2
-#f = Drift(2304,16)
+#f = LinearDrift(2304,16)
 #print(f(torch.rand(128,2304)).shape) # OK, SHAPE: [32,16]
-#g = Diffusion2304,16 * 3)
+#g = LinearDiffusion2304,16 * 3)
 #print(g(torch.rand(32,2304)).shape) # OK, SHAPE: [32,48]
+
+# Test 3
+f = ConvolutionDrift(3,32)
+g = ConvolutionDiffusion(3,32)
+print(f(torch.rand(32,3,32,32)).shape)
+print(g(torch.rand(32,3,32,32)).shape)

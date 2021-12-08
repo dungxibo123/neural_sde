@@ -91,7 +91,7 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
             val_loss, val_acc = model.module.evaluate(val_loader)
         else:
             val_loss, val_acc = model.evaluate(val_loader)
-        if acc > best_acc and val_acc > 0.85:
+        if acc > best_acc and val_acc > 0:
             best_acc = acc
             best_epoch = epoch_id + 1
             best_model = model
@@ -167,14 +167,12 @@ elif DATA_TYPE=="svhn":
 
 ds_len_, ds_ = preprocess_data(DATA,data_type=DATA_TYPE,device=device, sigma=None)
 _, perturbed_ds_ = preprocess_data(DATA,data_type=DATA_TYPE, device=device, sigma=[15.])
-#sigmas = [0.0,1e-5,10.0, 15.0,20.0]
-#loaders = [(key,DataLoader(preprocess_data(SVHN, sigma=[key,key], device=device, train=True)[1], batch_size=12000)) for key in sigma]
+sigmas = [10.0, 15.0 , 20.0]
+loaders = [(key,DataLoader(preprocess_data(DATA, sigma=[key], device=device, train=True)[1], batch_size=args.batch_size,drop_last=True)) for key in sigmas]
 sde_model = main( ds_len_, ds_, perturbed_ds_, device=device, model_type="sde", data_name=f"svhn_origin", batch_size=BATCH_SIZE, 
     epochs=EPOCHS, train_num=TRAIN_NUM, valid_num=VALID_NUM, test_num=TEST_NUM, result_dir=RESULT_DIR, parallel=PARALLEL, integral_type=INTEGRAL_TYPE, solver=SOLVER, noise_type=NOISE_TYPE, weight_decay=WEIGHT_DECAY)
-"""
 if isinstance(sde_model, nn.DataParallel): sde_model = sde_model.module
 for k,l in loaders:
     _, sde_acc = sde_model.evaluate(l)
     print(f"SDEs for {k}-gaussian-pertubed SVHN = {sde_acc}")
 
-"""
