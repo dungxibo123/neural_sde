@@ -57,7 +57,7 @@ WEIGHT_DECAY=args.weight_decay
 
 
 
-def train_model(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None, epochs=100, parallel=None):
+def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None, epochs=100, parallel=None):
     #print(model.eval())
     print(f"Numbers of parameters in model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     best_model, best_acc, best_epoch = None, 0, 0
@@ -87,7 +87,7 @@ def train_model(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler
 
         history["acc"].append(acc)
         history["loss"].append(running_loss)
-        if parallel is not None:
+        if parallel:
             val_loss, val_acc = model.module.evaluate(val_loader)
         else:
             val_loss, val_acc = model.evaluate(val_loader)
@@ -116,14 +116,15 @@ def train_model(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler
 
 def main(ds_len, train_ds, valid_ds, model_type = "sde", data_name = "mnist_50", batch_size=32, epochs=100, lr=1e-3,
     train_num = 0, valid_num = 0, test_num = 0, weight_decay=0,reduce_lr = None, device="cpu", result_dir="./result", model_dir="./model",
-    integral_type="ito", brownian_size=2, noise_type="general", parallel=None, option=dict()):
+    integral_type="ito", brownian_size=2, noise_type="general",solver="euler", parallel=None, option=dict()):
     # START THE MAIN PART
 ########################################################################################################################
     train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size, drop_last=True)
-    val_loader  = DataLoader(valid_ds, shuffle=True, batch_size= batch_size * 16, drop_last=True)
+    val_loader  = DataLoader(valid_ds, shuffle=True, batch_size= batch_size, drop_last=True)
     loss_fn = torch.nn.functional.binary_cross_entropy_with_logits
     #    epochs= int(epochs * 2.5)
     model = SDENet(
+        state_size=None,
         input_channel=3,
         input_size=32,
         brownian_size=brownian_size,
@@ -137,10 +138,13 @@ def main(ds_len, train_ds, valid_ds, model_type = "sde", data_name = "mnist_50",
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     if reduce_lr:
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,"min")
+    else:
+        lr_scheduler = None
    
     history, best_model, best_epoch, best_acc = train(model=model,
                                                       train_loader=train_loader,
                                                       val_loader=val_loader,
+                                                      optimizer=optimizer,
                                                       loss_fn=loss_fn,
                                                       epochs=epochs,
                                                       lr_scheduler=
