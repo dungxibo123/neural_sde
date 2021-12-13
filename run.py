@@ -1,18 +1,18 @@
 import os
-import sys
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torchvision
-from tqdm import tqdm
+import sys
+import torch
 import os.path
 import argparse
 
 import json
 from utils import *
 
+from tqdm import tqdm
 
 
 parser = argparse.ArgumentParser()
