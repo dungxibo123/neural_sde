@@ -75,20 +75,21 @@ class ConvolutionDrift(nn.Module):
         self.size=size
         self.in_channel=in_channel
         self.net = nn.Sequential(*[
-            nn.Conv2d(in_channel, 64,3,1),
+            nn.Conv2d(in_channel, 64,3,padding=1),
             nn.GroupNorm(32,64),
             nn.ReLU(),
-            nn.Conv2d(64, 64,3,1),
+            nn.Conv2d(64,64,3,padding=1),
             nn.GroupNorm(32,64),
             nn.ReLU(),
-            nn.Conv2d(64, in_channel,3,1),
+            nn.Conv2d(64, in_channel,3,padding=1),
             nn.ReLU(),
             
         ]).to(device)
     def forward(self,x):
         bs = x.shape[0]
-        out = x.view(bs,self.in_channel, self.size, self.size)
-        out = self.net(x)
+        out = x.view(bs, self.in_channel, self.size, self.size)
+#        print(f"{out.shape}\n\n\n\n")
+        out = self.net(out)
         out = out.view(bs,-1)
         return out
 class ConvolutionDiffusion(nn.Module):
@@ -97,20 +98,20 @@ class ConvolutionDiffusion(nn.Module):
         self.size=size
         self.in_channel=in_channel
         self.net = nn.Sequential(*[
-            nn.Conv2d(in_channel, 64,3,1),
+            nn.Conv2d(in_channel, 64,3,padding=1),
             nn.GroupNorm(32,64),
             nn.ReLU(),
-            nn.Conv2d(64, 64,3,1),
+            nn.Conv2d(64, 64,3,padding=1),
             nn.GroupNorm(32,64),
             nn.ReLU(),
-            nn.Conv2d(64, in_channel,3,1),
+            nn.Conv2d(64,in_channel * 2,3,padding=1),
             nn.ReLU(),
             
         ]).to(device)
     def forward(self,x):
         bs = x.shape[0]
-        out = x.view(bs,self.in_channel, self.size, self.size)
-        out = self.net(x)
+        out = x.view(bs, self.in_channel, self.size, self.size)
+        out = self.net(out)
         out = out.view(bs,-1)
         return out
         
@@ -118,7 +119,7 @@ class SDEBlock(nn.Module):
     noise_type="general"
     sde_type="ito"
     def __init__(self, state_size, brownian_size, batch_size, option = dict(), device="cpu", parallel=False,
-        method="euler", noise_type="general", integral_type="ito", is_ode=False, layers="linear"):
+        method="euler", noise_type="general", integral_type="ito", is_ode=False, input_conv_channel = 64,input_conv_size=6, layers="linear"):
         super(SDEBlock, self).__init__()
         self.noise_type=noise_type
         self.sde_type=integral_type
@@ -126,6 +127,8 @@ class SDEBlock(nn.Module):
         self.batch_size = batch_size
         self.brownian_size = brownian_size
         self.parallel = parallel
+        self.device = device
+        self.is_ode = is_ode
         if parallel:
             self.batch_size = int(self.batch_size / 2)
         
@@ -133,9 +136,9 @@ class SDEBlock(nn.Module):
             self.drift = LinearDrift(state_size, state_size).to(device)
             self.diffusion = LinearDiffusion(state_size, state_size * brownian_size).to(device)
 
-        elif layers="conv":
-            self.drift = ConvolutionDrift(3, self.size).to(device)
-            self.diffusion = ConvolutionDiffusion(state_size, state_size * brownian_size).to(device)
+        elif layers=="conv":
+            self.drift = ConvolutionDrift(input_conv_channel, input_conv_size).to(device)
+            self.diffusion = ConvolutionDiffusion(input_conv_channel, input_conv_size).to(device)
 
 
     def f(self,t,x):  
@@ -143,11 +146,12 @@ class SDEBlock(nn.Module):
         return out
         #return self.f(x)
     def g(self,t,x):
+        if self.is_ode:
+            out =  torch.zeros_like((self.batch_size,self.state_size, self.brownian_size)).to(self.device)
+            return out
         out = self.diffusion(x)
         
         out =  out.view(self.batch_size, self.state_size, self.brownian_size)
-        if self.is_ode:
-            out =  torch.zeros_like(out).to(out.device)
         return out
 
         
@@ -170,6 +174,7 @@ class SDENet(Model):
         self.parallel = parallel
         self.option = option
         state_size = 64 * 6 * 6
+        self.device = device
         self.fe = nn.Sequential(*[
             nn.Conv2d(input_channel,16,3,1),
             nn.GroupNorm(8,16),
@@ -182,6 +187,7 @@ class SDENet(Model):
             nn.ReLU(),
 
         ]).to(device)
+#        print(f"Init features extraction layer with device {self.device}")
         # Output shape from (B,3,32,32) -> (B,64,6,6)
         if parallel:
             self.batch_size = int(self.batch_size /  2)
@@ -213,6 +219,7 @@ class SDENet(Model):
         out = self.fe(x)
 #        print(f"Shape after Feature Extraction Layer: {out.shape}")
         out = out.view(self.batch_size,-1)
+#        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
         out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2,dt=0.05, dt_min=0.05)[-1]
@@ -234,7 +241,12 @@ class SDENet(Model):
 #print(g(torch.rand(32,2304)).shape) # OK, SHAPE: [32,48]
 
 # Test 3
-f = ConvolutionDrift(3,32)
-g = ConvolutionDiffusion(3,32)
-print(f(torch.rand(32,3,32,32)).shape)
-print(g(torch.rand(32,3,32,32)).shape)
+#f = ConvolutionDrift(64,6)
+#g = ConvolutionDiffusion(64,6)
+#print(f(torch.rand(32,2304)).shape)
+#print(g(torch.rand(32,2304)).shape)
+
+# Test 4
+sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
+u = torch.rand((32,3,32,32)).to("cuda")
+print(sde(u).shape)
