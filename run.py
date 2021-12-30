@@ -86,7 +86,7 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
             optimizer.step()
             running_loss += loss.item() 
             end = time.time() 
-            print("\t\t\t >>> Time for the batch number {batch_id + 1} in epoch number {epoch_id + 1} is {end - start}")
+            print(f"\t\t\t >>> Time for the batch number {batch_id + 1} in epoch number {epoch_id + 1} is {end - start}")
         if lr_scheduler:
             lr_scheduler.step()
         acc = correct / total

@@ -265,7 +265,13 @@ class SDENet(Model):
 
 # Test 4
 if __name__ == "__main__":
+    import time
     sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
-    u = torch.rand((1,3,32,32)).to("cuda")
-    print(sde.get_state_size())
-    print(sde(u).shape)
+    bz = 256
+    u = torch.rand((bz,3,32,32)).to("cuda")
+    tar = torch.rand((bz,10)).to("cuda")
+    out = sde(u)
+    loss = torch.nn.functional.binary_cross_entropy_with_logits(out,tar)
+    now = time.time()
+    loss.backward()
+    print(f"Time for backward process: {time.time() - now}")
