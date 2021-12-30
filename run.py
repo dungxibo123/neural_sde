@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 from torch.nn.parallel import DistributedDataParallel as DDP
+import time
 import torchvision
 from tqdm import tqdm
 import os.path
@@ -59,19 +60,21 @@ WEIGHT_DECAY=args.weight_decay
 
 def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None, epochs=100, parallel=None):
     #print(model.eval())
-    print(f"Numbers of parameters in model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+    print(f"> Numbers of parameters in model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     best_model, best_acc, best_epoch = None, 0, 0
     history = {"loss": [], "acc": [], "val_loss": [], "val_acc": []}
     for epoch_id in tqdm(range(epochs)):
         total = 0
         correct = 0
         running_loss = 0
-        print(f"Start epoch number: {epoch_id + 1}")
+        print(f"\n > Start epoch number: {epoch_id + 1}")
 #        print(next(enumerate(train_loader,0)))
         loads = list(enumerate(train_loader,0))
         for batch_id, data in loads:
-            datas = data.to(device)
-            inputs, labels = datas
+            start = time.time() 
+            inputs, labels = data
+            inputs = inputs.to(device)
+            labels = labels.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
             _, predicted = torch.max(outputs, 1)
@@ -82,6 +85,8 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
             loss.backward()
             optimizer.step()
             running_loss += loss.item() 
+            end = time.time() 
+            print("\t\t\t >>> Time for the batch number {batch_id + 1} in epoch number {epoch_id + 1} is {end - start}")
         if lr_scheduler:
             lr_scheduler.step()
         acc = correct / total
@@ -107,7 +112,7 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
             'optimizer': optimizer.state_dict()
         }
         torch.save(checkpoint, "./checkpoints/checkpoint.pt")
-        print("Epoch(s) {:04d}/{:04d} | acc: {:.05f} | loss: {:.09f} | val_acc: {:.05f} | val_loss: {:.09f} | Best epochs: {:04d} | Best acc: {:09f}".format(
+        print("\t >>> Epoch(s) {:04d}/{:04d} | acc: {:.05f} | loss: {:.09f} | val_acc: {:.05f} | val_loss: {:.09f} | Best epochs: {:04d} | Best acc: {:09f}".format(
             epoch_id + 1, epochs, acc, running_loss, val_acc, val_loss, best_epoch, best_acc
             ))
 
