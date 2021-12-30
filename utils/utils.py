@@ -21,7 +21,7 @@ def save_result(his, model_name = "ode",ds_name="mnist_0", result_dir="./result"
 
 def add_noise(converted_data, sigma = 10,device="cpu"):
     pertubed_data = converted_data + torch.normal(torch.zeros_like(torch.Tensor(converted_data)),
-                                                  torch.ones_like(torch.Tensor(converted_data)) * sigma).to(device)
+                                                  torch.ones_like(torch.Tensor(converted_data)) * sigma)
     #pertubed_data = torch.tensor(random_noise(converted_data.cpu(), mode='gaussian', mean=0, var=sigma**2, clip=False)).float().to(device)
     return pertubed_data
 def preprocess_data(data, data_type="svhn", sigma=None,device="cpu", train=False):
@@ -47,9 +47,7 @@ def preprocess_data(data, data_type="svhn", sigma=None,device="cpu", train=False
             X = X / 255.0
             print(f"Generating {sigma}-pertubed-dataset")
         y_data = F.one_hot(torch.Tensor(Y).to(torch.int64), num_classes=10)
-        y_data = y_data.to(device)
         x_data = torch.Tensor(X)
-        x_data = x_data.to(device)
 
         pertubed_ds = TensorDataset(x_data,y_data)
         #ds.update({"original": TensorDataset(x_data / 255.0, y_data)})
@@ -67,8 +65,6 @@ def preprocess_data(data, data_type="svhn", sigma=None,device="cpu", train=False
             else: X.append(noise_x.transpose(2,0,1))
             Y.append(y)
         y_data = F.one_hot(torch.Tensor(Y).to(torch.int64), num_classes=10)
-        y_data = y_data.to(device)
         x_data = torch.Tensor(X)
-        x_data = x_data.to(device)
         print(f"Shape of preprocessed data: {x_data.shape}")
         return len(Y), TensorDataset(x_data,y_data) 

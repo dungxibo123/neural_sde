@@ -70,7 +70,8 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
 #        print(next(enumerate(train_loader,0)))
         loads = list(enumerate(train_loader,0))
         for batch_id, data in loads:
-            inputs, labels = data
+            datas = data.to(device)
+            inputs, labels = datas
             optimizer.zero_grad()
             outputs = model(inputs)
             _, predicted = torch.max(outputs, 1)
