@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-d", "--device", type=str, default="cpu", help="Device which the PyTorch run on")
 parser.add_argument("-bs", "--batch-size", type=int, default=1024, help="Batch size of 1 iteration")
 parser.add_argument("-ep", "--epochs", type=int, default=200, help="Numbers of epoch")
-parser.add_argument("-da", "--data", type=str, default="svhn", help="cifar10/svhn/mnist")
+parser.add_argument("-da", "--data", type=str, default="cifar10", help="cifar10/svhn/mnist")
 parser.add_argument("-r", "--result", type=str, default="./result", help="Folder where the result going in")
 parser.add_argument("-tr", "--train", type=int, default=20000, help="Number of train images")
 parser.add_argument("-vl", "--valid", type=int, default=5000, help="Number of validation images")
@@ -97,8 +97,8 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
             val_loss, val_acc = model.module.evaluate(val_loader)
         else:
             val_loss, val_acc = model.evaluate(val_loader)
-        if acc > best_acc and val_acc > 0:
-            best_acc = acc
+        if val_acc > best_acc and val_acc > 0:
+            best_acc = val_acc
             best_epoch = epoch_id + 1
             best_model = model
         history["val_loss"].append(val_loss)
@@ -175,12 +175,12 @@ ds_len_, ds_ = preprocess_data(DATA,data_type=DATA_TYPE,device=device, sigma=Non
 _, perturbed_ds_ = preprocess_data(DATA,data_type=DATA_TYPE, device=device, sigma=[15.])
 sde_model = main( ds_len_, ds_, perturbed_ds_, device=device, model_type="sde", data_name=f"svhn_origin", batch_size=BATCH_SIZE, 
     epochs=EPOCHS, train_num=TRAIN_NUM, valid_num=VALID_NUM, test_num=TEST_NUM, result_dir=RESULT_DIR, parallel=PARALLEL, integral_type=INTEGRAL_TYPE, solver=SOLVER, noise_type=NOISE_TYPE, weight_decay=WEIGHT_DECAY)
-"""
+
 sigmas = [10.0, 15.0 , 20.0]
 loaders = [(key,DataLoader(preprocess_data(DATA, sigma=[key], device=device, train=True)[1], batch_size=args.batch_size,drop_last=True)) for key in sigmas]
 if isinstance(sde_model, nn.DataParallel): sde_model = sde_model.module
 for k,l in loaders:
     _, sde_acc = sde_model.evaluate(l)
-    print(f"SDEs for {k}-gaussian-pertubed SVHN = {sde_acc}")
+    print(f"SDEs for {k}-gaussian-pertubed {DATA_TYPE.upper()} = {sde_acc}")
 
-"""
+

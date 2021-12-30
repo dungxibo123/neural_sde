@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from skimage.util import random_noise
+#from skimage.util import random_noise
 from torch.utils.data import TensorDataset
 import torchvision
 import os.path
