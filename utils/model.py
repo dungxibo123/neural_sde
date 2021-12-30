@@ -194,7 +194,7 @@ class SDENet(Model):
         
 #        print(state_size, input_conv_channel, input_conv_size, "ehehehehehe\n\n\n\n")
 #        print(f"Init features extraction layer with device {self.device}")
-        # Output shape from (B,3,32,32) -> (B,64,6,6)
+        # Output shape from (B,3,32,32) -> (B,64,14,14)
         if parallel:
             self.batch_size = int(self.batch_size /  2)
         self.rm = SDEBlock(
@@ -238,9 +238,9 @@ class SDENet(Model):
 #        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
-        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2,dt_min=0.05)[-1]
-        out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
-        out = self.fcc(out)
+        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2,dt_min=0.05, dt=0.1)[-1]
+#        out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
+#        out = self.fcc(out)
         return out
 
 
@@ -269,8 +269,8 @@ if __name__ == "__main__":
     sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
     bz = 256
     u = torch.rand((bz,3,32,32)).to("cuda")
-    tar = torch.rand((bz,10)).to("cuda")
     out = sde(u)
+    tar = torch.zeros_like(out).to("cuda")
     loss = torch.nn.functional.binary_cross_entropy_with_logits(out,tar)
     now = time.time()
     loss.backward()
