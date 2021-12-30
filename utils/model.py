@@ -79,6 +79,7 @@ class ConvolutionDrift(nn.Module):
             nn.GroupNorm(32,64),
             nn.ReLU(),
             nn.Conv2d(64, in_channel,3,padding=1),
+            nn.GroupNorm(32, in_channel),
             nn.ReLU(),
             
         ]).to(device)
@@ -143,12 +144,13 @@ class SDEBlock(nn.Module):
         return out
         #return self.f(x)
     def g(self,t,x):
+        bs = x.shape[0]
         if self.is_ode:
             out =  torch.zeros_like((self.batch_size,self.state_size, self.brownian_size)).to(self.device)
             return out
         out = self.diffusion(x)
         
-        out =  out.view(self.batch_size, self.state_size, self.brownian_size)
+        out =  out.view(bs, self.state_size, self.brownian_size)
         return out
 
         
@@ -175,16 +177,22 @@ class SDENet(Model):
         #state_size = 64 * 14 * 14
         self.device = device
         self.fe = nn.Sequential(*[
-            nn.Conv2d(input_channel,16,3,1),
+            nn.Conv2d(input_channel,16,3,padding=1),
             nn.GroupNorm(8,16),
             nn.ReLU(),
-            nn.Conv2d(16,32,4,2),
+            nn.Conv2d(16,32,4,padding=2),
             nn.GroupNorm(16,32),
+            nn.ReLU(),
+            nn.Conv2d(32,64,3,2),
+            nn.GroupNorm(32,64),
             nn.ReLU(),
 
         ]).to(device)
         state_size, input_conv_channel, input_conv_size = self.get_state_size()
+        self.input_conv_channel = input_conv_channel
+        self.input_conv_size = input_conv_size
         
+#        print(state_size, input_conv_channel, input_conv_size, "ehehehehehe\n\n\n\n")
 #        print(f"Init features extraction layer with device {self.device}")
         # Output shape from (B,3,32,32) -> (B,64,6,6)
         if parallel:
@@ -207,7 +215,9 @@ class SDENet(Model):
 
 
         self.fcc = nn.Sequential(*[
-            nn.Linear(state_size,10),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(input_conv_channel,10),
             nn.Softmax(dim = 1)
         ]).to(device)
 
@@ -228,7 +238,8 @@ class SDENet(Model):
 #        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
-        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2,dt=0.05, dt_min=0.05)[-1]
+        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2,dt_min=0.05)[-1]
+        out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
         out = self.fcc(out)
         return out
 
@@ -255,6 +266,6 @@ class SDENet(Model):
 # Test 4
 if __name__ == "__main__":
     sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
-    u = torch.rand((32,3,32,32)).to("cuda")
+    u = torch.rand((1,3,32,32)).to("cuda")
     print(sde.get_state_size())
     print(sde(u).shape)
