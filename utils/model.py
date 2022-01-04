@@ -263,7 +263,7 @@ class SDENet(Model):
             nn.Softmax(dim = 1)
         ]).to(device)
 
-
+        self.flat = Flatten(start_dim = 1, end_dim = -1)
         self.intergrated_time = torch.Tensor([0.0,1.0]).to(device)
         self.device = device
         self.method = method
@@ -272,11 +272,12 @@ class SDENet(Model):
         with torch.no_grad():
             shape = self.fe(out)
         return shape.view(1,-1).shape[-1], shape.shape[1], shape.shape[2]
+              
     def forward(self,x):
         out = self.fe(x)
         bs = x.shape[0]
 #        print(f"Shape after Feature Extraction Layer: {out.shape}")
-        out = out.view(bs,-1)
+        out = self.flat(out)
 #        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
