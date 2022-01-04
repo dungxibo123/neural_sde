@@ -53,6 +53,7 @@ class ConcatConv2d(nn.Module):
 
 class Norm(nn.Module):
     def __init__(self, dim):
+        super(Norm, self).__init__()
         self.norm = nn.GroupNorm(min(dim,32), dim)
     def forward(self,x):
         return self.norm(x)
@@ -75,7 +76,7 @@ class LinearDrift(nn.Module):
             nn.ReLU(),
 
         ]).to(device)
-    def forward(self,x):
+    def forward(self,t,x):
         return self.net(x)
 
 class LinearDiffusion(nn.Module):
@@ -89,7 +90,7 @@ class LinearDiffusion(nn.Module):
             nn.Linear(64,out_hidden),
             nn.ReLU()
         ]).to(device)
-    def forward(self,x):
+    def forward(self,t,x):
         return self.net(x)
 
 class ConvolutionDrift(nn.Module):
@@ -97,44 +98,60 @@ class ConvolutionDrift(nn.Module):
         super(ConvolutionDrift,self).__init__()
         self.size=size
         self.in_channel=in_channel
-        self.conv1 = ConcatConv2d(in_channel, 64,ksize=3,padding=1),
+        self.conv1 = ConcatConv2d(in_channel, 64,ksize=3,padding=1)
         self.norm1 = Norm(64) 
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = ConcatConv2d(64, 64,ksize=3,padding=1),
+        self.conv2 = ConcatConv2d(64, 64, ksize=3,padding=1)
         self.norm2 = Norm(in_channel) 
         
-    def forward(self,x):
+    def forward(self,t,x):
         bs = x.shape[0]
         out = x.view(bs, self.in_channel, self.size, self.size)
 #        print(f"{out.shape}\n\n\n\n")
-        out = self.conv1(out)
-        out = self.conv1(out)
+        out = self.conv1(t,out)
+        out = self.norm1(out)
         out = self.relu(out)
-        out = self.norm2(out)
+        out = self.conv2(t,out)
         out = self.norm2(out)
         out = self.relu(out)
         out = out.view(bs,-1)
         return out
 class ConvolutionDiffusion(nn.Module):
-    def __init__(self, in_channel, size=32, device="cpu"):
+    def __init__(self, in_channel, size=32, brownian_size = 2, device="cpu"):
         super(ConvolutionDiffusion,self).__init__()
         self.size=size
         self.in_channel=in_channel
-        self.net = nn.Sequential(*[
-            nn.Conv2d(in_channel, 64,3,padding=1),
-            nn.GroupNorm(32,64),
-            nn.ReLU(),
-            nn.Conv2d(64, 64,3,padding=1),
-            nn.GroupNorm(32,64),
-            nn.ReLU(),
-            nn.Conv2d(64,in_channel * 2,3,padding=1),
-            nn.ReLU(),
-            
-        ]).to(device)
-    def forward(self,x):
+#        self.net = nn.Sequential(*[
+#            nn.Conv2d(in_channel, 64,3,padding=1),
+#            nn.GroupNorm(32,64),
+#            nn.ReLU(),
+#            nn.Conv2d(64, 64,3,padding=1),
+#            nn.GroupNorm(32,64),
+#            nn.ReLU(),
+#            nn.Conv2d(64,in_channel * 2,3,padding=1),
+#            nn.ReLU(),
+#            
+#        ]).to(device)
+        self.relu = nn.ReLU()
+        self.norm1 = Norm(64)
+        self.conv1 = ConcatConv2d(in_channel, 64, ksize=3, padding = 1)
+        self.conv2 = ConcatConv2d(64,64, ksize=3, padding = 1)
+        self.norm2 = Norm(64)
+        self.conv3 = ConcatConv2d(64, in_channel * brownian_size, ksize = 3, padding = 1)
+        self.norm3 = Norm(in_channel * brownian_size)
+    def forward(self,t,x):
         bs = x.shape[0]
         out = x.view(bs, self.in_channel, self.size, self.size)
-        out = self.net(out)
+        # out = self.net(out)
+        out = self.conv1(t,out)
+        out = self.norm1(out)
+        out = self.relu(out)
+        out = self.conv2(t,out)
+        out = self.norm2(out)
+        out = self.relu(out)
+        out = self.conv3(t,out)
+        out = self.norm3(out)
+        out = self.relu(out)
         out = out.view(bs,-1)
         return out
         
@@ -161,11 +178,11 @@ class SDEBlock(nn.Module):
 
         elif layers=="conv":
             self.drift = ConvolutionDrift(input_conv_channel, input_conv_size).to(device)
-            self.diffusion = ConvolutionDiffusion(input_conv_channel, input_conv_size).to(device)
+            self.diffusion = ConvolutionDiffusion(input_conv_channel, input_conv_size, brownian_size = self.brownian_size).to(device)
 
 
     def f(self,t,x):  
-        out = self.drift(x)
+        out = self.drift(t,x)
         return out
         #return self.f(x)
     def g(self,t,x):
@@ -173,7 +190,7 @@ class SDEBlock(nn.Module):
         if self.is_ode:
             out =  torch.zeros_like((self.batch_size,self.state_size, self.brownian_size)).to(self.device)
             return out
-        out = self.diffusion(x)
+        out = self.diffusion(t,x)
         
         out =  out.view(bs, self.state_size, self.brownian_size)
         return out
@@ -287,16 +304,16 @@ class SDENet(Model):
 # Test 4
 if __name__ == "__main__":
     import time
-#    sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
-#    bz = 256
-#    u = torch.rand((bz,3,32,32)).to("cuda")
-#    out = sde(u)
-    f = ConvolutionDrift(64,6)
-    g = ConvolutionDiffusion(64,6)
-    print(f(torch.rand(32,2304)).shape)
-    print(g(torch.rand(32,2304)).shape)
-#    tar = torch.zeros_like(out).to("cuda")
-#    loss = torch.nn.functional.binary_cross_entropy_with_logits(out,tar)
-#    now = time.time()
-#    loss.backward()
-#    print(f"Time for backward process: {time.time() - now}")
+    sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=256,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
+    bz = 1024
+    u = torch.rand((bz,3,32,32)).to("cuda")
+    out = sde(u)
+#    f = ConvolutionDrift(64,6)
+#    g = ConvolutionDiffusion(64,6)
+#    print(f(torch.rand(32,2304)).shape)
+#    print(g(torch.rand(32,2304)).shape)
+    tar = torch.zeros_like(out).to("cuda")
+    loss = torch.nn.functional.binary_cross_entropy_with_logits(out,tar)
+    now = time.time()
+    loss.backward()
+    print(f"Time for backward process: {time.time() - now}")
