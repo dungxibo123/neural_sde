@@ -46,7 +46,11 @@ DATA_TYPE=args.data
 RESULT_DIR=args.result
 TRAIN_NUM=args.train
 VALID_NUM=args.valid
-TEST_NUM=50000-TRAIN_NUM-VALID_NUM
+if DATA_TYPE=="cifar10":
+    DATA_SIZE = 10000
+else:
+    DATA_SIZE = 73257
+TEST_NUM=DATA_SIZE-TRAIN_NUM-VALID_NUM
 DATA_DISTRIBUTION=[TRAIN_NUM,VALID_NUM,TEST_NUM]
 MODEL_DIR=args.model
 PARALLEL=args.parallel
@@ -59,7 +63,7 @@ WEIGHT_DECAY=args.weight_decay
 
 
 def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None, epochs=100, parallel=None):
-    #print(model.eval())
+    print(model.eval())
     print(f"> Numbers of parameters in model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     best_model, best_acc, best_epoch = None, 0, 0
     history = {"loss": [], "acc": [], "val_loss": [], "val_acc": []}
@@ -86,7 +90,7 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
             optimizer.step()
             running_loss += loss.item() 
             end = time.time() 
-            print(f"\t\t\t >>> Time for the batch number {batch_id + 1} in epoch number {epoch_id + 1} is {end - start}")
+            print(f"\t >>> Time for the batch number {batch_id + 1} in epoch number {epoch_id + 1} is {end - start}")
         if lr_scheduler:
             lr_scheduler.step()
         acc = correct / total
@@ -111,7 +115,8 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
             'best_epoch': best_epoch,
             'optimizer': optimizer.state_dict()
         }
-        torch.save(checkpoint, "./checkpoints/checkpoint.pt")
+        if epoch_id % 20 == 0:
+            torch.save(checkpoint, "./checkpoints/checkpoint.pt")
         print("\t >>> Epoch(s) {:04d}/{:04d} | acc: {:.05f} | loss: {:.09f} | val_acc: {:.05f} | val_loss: {:.09f} | Best epochs: {:04d} | Best acc: {:09f}".format(
             epoch_id + 1, epochs, acc, running_loss, val_acc, val_loss, best_epoch, best_acc
             ))
@@ -120,15 +125,18 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
 
 
 
-def main(ds_len, train_ds, valid_ds, model_type = "sde", data_name = "mnist_50", batch_size=32, epochs=100, lr=1e-3,
+def main(ds_len, train_ds, valid_ds = None, model_type = "sde", data_name = "mnist_50", batch_size=32, epochs=100, lr=1e-3,
     train_num = 0, valid_num = 0, test_num = 0, weight_decay=0,reduce_lr = None, device="cpu", result_dir="./result", model_dir="./model",
     integral_type="ito", brownian_size=2, noise_type="general",solver="euler", parallel=None, option=dict()):
     # START THE MAIN PART
 ########################################################################################################################
+    print("Spliting dataset") 
+    train_ds, valid_ds, _ = random_split(train_ds, lengths = [train_num, valid_num, test_num]) 
     train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size, drop_last=True)
     val_loader  = DataLoader(valid_ds, shuffle=True, batch_size= batch_size, drop_last=True)
     loss_fn = torch.nn.functional.binary_cross_entropy_with_logits
     #    epochs= int(epochs * 2.5)
+    print("Creating model")
     model = SDENet(
         state_size=None,
         input_channel=3,
