@@ -269,8 +269,7 @@ class SDENet(Model):
         self.method = method
     def get_state_size(self):
         out = torch.rand((1,self.input_channel,self.input_size, self.input_size)).to(self.device)
-        with torch.no_grad():
-            shape = self.fe(out)
+        shape = self.fe(out)
         return shape.view(1,-1).shape[-1], shape.shape[1], shape.shape[2]
     def forward(self,x):
         out = self.fe(x)
@@ -280,7 +279,7 @@ class SDENet(Model):
 #        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
-        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.1, dt_min=0.05)[-1]
+        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.1, dt_min=0.05,adaptive=True)[-1]
         out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
         out = self.fcc(out)
         return out

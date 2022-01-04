@@ -47,7 +47,7 @@ RESULT_DIR=args.result
 TRAIN_NUM=args.train
 VALID_NUM=args.valid
 if DATA_TYPE=="cifar10":
-    DATA_SIZE = 10000
+    DATA_SIZE = 50000
 else:
     DATA_SIZE = 73257
 TEST_NUM=DATA_SIZE-TRAIN_NUM-VALID_NUM
@@ -73,7 +73,7 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
         running_loss = 0
         print(f"\n > Start epoch number: {epoch_id + 1}")
 #        print(next(enumerate(train_loader,0)))
-        loads = list(enumerate(train_loader,0))
+        loads = list(enumerate(train_loader, 0))
         for batch_id, data in loads:
             start = time.time() 
             inputs, labels = data
@@ -182,7 +182,7 @@ elif DATA_TYPE=="svhn":
 ds_len_, ds_ = preprocess_data(DATA,data_type=DATA_TYPE,device=device, sigma=None)
 _, perturbed_ds_ = preprocess_data(DATA,data_type=DATA_TYPE, device=device, sigma=[15.])
 sde_model = main( ds_len_, ds_, perturbed_ds_, device=device, model_type="sde", data_name=f"svhn_origin", batch_size=BATCH_SIZE, 
-    epochs=EPOCHS, train_num=TRAIN_NUM, valid_num=VALID_NUM, test_num=TEST_NUM, result_dir=RESULT_DIR, parallel=PARALLEL, integral_type=INTEGRAL_TYPE, solver=SOLVER, noise_type=NOISE_TYPE, weight_decay=WEIGHT_DECAY)
+    epochs=EPOCHS, train_num=TRAIN_NUM, valid_num=VALID_NUM, test_num=TEST_NUM, result_dir=RESULT_DIR, parallel=PARALLEL, integral_type=INTEGRAL_TYPE, solver=SOLVER, noise_type=NOISE_TYPE, weight_decay=WEIGHT_DECAY, brownian_size=BROWNIAN_SIZE)
 
 sigmas = [10.0, 15.0 , 20.0]
 loaders = [(key,DataLoader(preprocess_data(DATA, sigma=[key], device=device, train=True)[1], batch_size=args.batch_size,drop_last=True)) for key in sigmas]
