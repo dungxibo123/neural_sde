@@ -208,11 +208,12 @@ SDENet: fe -> SDEBlock -> fcc
     
 class SDENet(Model):
     def __init__(self, input_channel, input_size, state_size, brownian_size, batch_size, option = dict(), method="euler",
-        noise_type="general", integral_type="ito", device = "cpu", is_ode=False,parallel = False):
+        noise_type="general", integral_type="ito", device = "cpu", is_ode=False,parallel = False, layers ="linear"):
         """"""""""""""""""""""""
         super(SDENet, self).__init__()
         self.batch_size = batch_size
         self.parallel = parallel
+        self.layers = layers
         self.input_size = input_size
         self.option = option
         self.input_channel = input_channel
@@ -222,17 +223,18 @@ class SDENet(Model):
             nn.Conv2d(input_channel,16,3,padding=1),
             nn.GroupNorm(8,16),
             nn.ReLU(),
-            nn.Conv2d(16,32,4,padding=2),
+            nn.Conv2d(16,32,4,2),
             nn.GroupNorm(16,32),
             nn.ReLU(),
             nn.Conv2d(32,64,3,2),
             nn.GroupNorm(32,64),
             nn.ReLU(),
-
+            nn.Flatten(),
         ]).to(device)
         state_size, input_conv_channel, input_conv_size = self.get_state_size()
         self.input_conv_channel = input_conv_channel
         self.input_conv_size = input_conv_size
+        self.state_size = state_size
         
 #        print(state_size, input_conv_channel, input_conv_size, "ehehehehehe\n\n\n\n")
 #        print(f"Init features extraction layer with device {self.device}")
@@ -252,36 +254,44 @@ class SDENet(Model):
                 is_ode=is_ode,
                 input_conv_channel=input_conv_channel,
                 input_conv_size=input_conv_size,
-                layers="conv"
+                layers=self.layers
             ).to(device)
 
+        if self.layers == "conv":
+            self.fcc = nn.Sequential(*[
+                nn.AdaptiveAvgPool2d(1),
+                nn.Flatten(),
+                nn.Linear(input_conv_channel,10),
+                nn.Softmax(dim = 1)
+            ]).to(device)
+        else:
+            self.fcc = nn.Sequential(*[
+                nn.Linear(self.state_size,10),
+                nn.Softmax(dim = 1)
+            ]).to(device)
+            
 
-        self.fcc = nn.Sequential(*[
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten(),
-            nn.Linear(input_conv_channel,10),
-            nn.Softmax(dim = 1)
-        ]).to(device)
-
-        self.flat = Flatten(start_dim = 1, end_dim = -1)
         self.intergrated_time = torch.Tensor([0.0,1.0]).to(device)
         self.device = device
         self.method = method
     def get_state_size(self):
         out = torch.rand((1,self.input_channel,self.input_size, self.input_size)).to(self.device)
         shape = self.fe(out)
-        return shape.view(1,-1).shape[-1], shape.shape[1], shape.shape[2]
+        if self.layers == "conv":
+            return shape.view(1,-1).shape[-1], shape.shape[1], shape.shape[2]
+        return shape.view(1,-1).shape[-1], 0, 0
               
     def forward(self,x):
         out = self.fe(x)
         bs = x.shape[0]
 #        print(f"Shape after Feature Extraction Layer: {out.shape}")
-        out = self.flat(out)
+#        out = self.flat(out)
 #        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
         out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.1, dt_min=0.05,adaptive=True)[-1]
-        out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
+        if self.layers == "conv":
+            out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
         out = self.fcc(out)
         return out
 
