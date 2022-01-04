@@ -9,6 +9,7 @@ import sys
 import os
 
 sys.path.insert(0,os.path.abspath(__file__))
+
 class Model(nn.Module):
     def __init__(self):
         super(Model,self).__init__()
@@ -31,8 +32,28 @@ class Model(nn.Module):
         acc = correct / total
         running_loss /= count
         
+       
         return running_loss,acc
+class ConcatConv2d(nn.Module):
 
+    def __init__(self, dim_in, dim_out, ksize=3, stride=1, padding=0, dilation=1, groups=1, bias=True, transpose=False):
+        super(ConcatConv2d, self).__init__()
+        module = nn.ConvTranspose2d if transpose else nn.Conv2d
+        self._layer = module(
+            dim_in + 1, dim_out, kernel_size=ksize, stride=stride, padding=padding, dilation=dilation, groups=groups,
+            bias=bias
+        )
+
+    def forward(self, t, x):
+        tt = torch.ones_like(x[:, :1, :, :]) * t
+        ttx = torch.cat([tt, x], 1)
+        return self._layer(ttx)
+
+class Norm(nn.Module):
+    def __init__(self, dim):
+        self.norm = nn.GroupNorm(min(dim,32), dim)
+    def forward(self,x):
+        return self.norm(x)
 
 class LinearDrift(nn.Module):
     def __init__(self,in_hidden,out_hidden, device="cpu"): 
@@ -74,20 +95,22 @@ class ConvolutionDrift(nn.Module):
         super(ConvolutionDrift,self).__init__()
         self.size=size
         self.in_channel=in_channel
-        self.net = nn.Sequential(*[
-            nn.Conv2d(in_channel, 64,3,padding=1),
-            nn.GroupNorm(32,64),
-            nn.ReLU(),
-            nn.Conv2d(64, in_channel,3,padding=1),
-            nn.GroupNorm(32, in_channel),
-            nn.ReLU(),
-            
-        ]).to(device)
+        self.conv1 = ConcatConv2d(in_channel, 64,ksize=3,padding=1),
+        self.norm1 = Norm(64) 
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = ConcatConv2d(64, 64,ksize=3,padding=1),
+        self.norm2 = Norm(in_channel) 
+        
     def forward(self,x):
         bs = x.shape[0]
         out = x.view(bs, self.in_channel, self.size, self.size)
 #        print(f"{out.shape}\n\n\n\n")
-        out = self.net(out)
+        out = self.conv1(out)
+        out = self.conv1(out)
+        out = self.relu(out)
+        out = self.norm2(out)
+        out = self.norm2(out)
+        out = self.relu(out)
         out = out.view(bs,-1)
         return out
 class ConvolutionDiffusion(nn.Module):
@@ -258,20 +281,20 @@ class SDENet(Model):
 #print(g(torch.rand(32,2304)).shape) # OK, SHAPE: [32,48]
 
 # Test 3
-#f = ConvolutionDrift(64,6)
-#g = ConvolutionDiffusion(64,6)
-#print(f(torch.rand(32,2304)).shape)
-#print(g(torch.rand(32,2304)).shape)
 
 # Test 4
 if __name__ == "__main__":
     import time
-    sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
-    bz = 256
-    u = torch.rand((bz,3,32,32)).to("cuda")
-    out = sde(u)
-    tar = torch.zeros_like(out).to("cuda")
-    loss = torch.nn.functional.binary_cross_entropy_with_logits(out,tar)
-    now = time.time()
-    loss.backward()
-    print(f"Time for backward process: {time.time() - now}")
+#    sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
+#    bz = 256
+#    u = torch.rand((bz,3,32,32)).to("cuda")
+#    out = sde(u)
+    f = ConvolutionDrift(64,6)
+    g = ConvolutionDiffusion(64,6)
+    print(f(torch.rand(32,2304)).shape)
+    print(g(torch.rand(32,2304)).shape)
+#    tar = torch.zeros_like(out).to("cuda")
+#    loss = torch.nn.functional.binary_cross_entropy_with_logits(out,tar)
+#    now = time.time()
+#    loss.backward()
+#    print(f"Time for backward process: {time.time() - now}")
