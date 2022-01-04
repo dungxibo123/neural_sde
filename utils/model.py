@@ -22,6 +22,8 @@ class Model(nn.Module):
             for test_data in test_loader:
                 count += 1
                 data, label = test_data
+                data = data.to(self.device)
+                label = label.to(self.device)
                 outputs = self.forward(data)
                 _, correct_labels = torch.max(label, 1) 
                 _, predicted = torch.max(outputs.data, 1)
@@ -261,7 +263,7 @@ class SDENet(Model):
 #        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
-        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2,dt_min=0.05, dt=0.1)[-1]
+        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.1, dt_min=0.05)[-1]
         out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
         out = self.fcc(out)
         return out
