@@ -75,7 +75,7 @@ class LinearDrift(nn.Module):
             nn.Linear(8,out_hidden),
             nn.ReLU(),
 
-        ]).to(device)
+        ])
     def forward(self,t,x):
         return self.net(x)
 
@@ -83,13 +83,13 @@ class LinearDiffusion(nn.Module):
     def __init__(self, in_hidden, out_hidden, device="cpu"): 
         super(LinearDiffusion,self).__init__()
         self.net = nn.Sequential(*[
-            nn.Linear(in_hidden, 128),
+            nn.Linear(in_hidden, 64),
             nn.ReLU(),
-            nn.Linear(128,64),
+            nn.Linear(64,64),
             nn.ReLU(),
             nn.Linear(64,out_hidden),
             nn.ReLU()
-        ]).to(device)
+        ])
     def forward(self,t,x):
         return self.net(x)
 
@@ -98,10 +98,10 @@ class ConvolutionDrift(nn.Module):
         super(ConvolutionDrift,self).__init__()
         self.size=size
         self.in_channel=in_channel
-        self.conv1 = ConcatConv2d(in_channel, 64,ksize=3,padding=1)
+        self.conv1 = ConcatConv2d(in_channel, 64, ksize=3,padding=1)
         self.norm1 = Norm(64) 
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = ConcatConv2d(64, 64, ksize=3,padding=1)
+        self.conv2 = ConcatConv2d(64, 64, ksize=3, padding=1)
         self.norm2 = Norm(in_channel) 
         
     def forward(self,t,x):
@@ -223,7 +223,7 @@ class SDENet(Model):
             nn.Conv2d(input_channel,16,3,padding=1),
             nn.GroupNorm(8,16),
             nn.ReLU(),
-            nn.Conv2d(16,32,4,2),
+            nn.Conv2d(16,32,5,2),
             nn.GroupNorm(16,32),
             nn.ReLU(),
             nn.Conv2d(32,64,3,2),
@@ -255,7 +255,7 @@ class SDENet(Model):
                 input_conv_channel=input_conv_channel,
                 input_conv_size=input_conv_size,
                 layers=self.layers
-            ).to(device)
+            )
 
 #        if self.layers == "conv":
 #            self.fcc = nn.Sequential(*[
@@ -268,7 +268,7 @@ class SDENet(Model):
         self.fcc = nn.Sequential(*[
             nn.Linear(self.state_size,10),
             nn.Softmax(dim = 1)
-        ]).to(device)
+        ])
             
 
         self.intergrated_time = torch.Tensor([0.0,1.0]).to(device)
@@ -290,7 +290,7 @@ class SDENet(Model):
 #        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
-        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.25)[-1]
+        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.2)[-1]
 #        if self.layers == "conv":
 #            out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
         out = self.fcc(out)

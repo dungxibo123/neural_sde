@@ -90,7 +90,7 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
             optimizer.step()
             running_loss += loss.item() 
             end = time.time() 
-            print(f"\t >>> Time for the batch number {batch_id + 1} in epoch number {epoch_id + 1} is {end - start}")
+    #        print(f"\t >>> Time for the batch number {batch_id + 1} in epoch number {epoch_id + 1} is {end - start}")
         if lr_scheduler:
             lr_scheduler.step()
         acc = correct / total
@@ -131,8 +131,7 @@ def main(ds_len, train_ds, valid_ds = None, model_type = "sde", data_name = "mni
     # START THE MAIN PART
 ########################################################################################################################
     print("Spliting dataset") 
-    if valid_ds is None:
-        train_ds, valid_ds, _ = random_split(train_ds, lengths = [train_num, valid_num, test_num]) 
+    train_ds, valid_ds, _ = random_split(train_ds, lengths = [train_num, valid_num, test_num]) 
     train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size, drop_last=True)
     val_loader  = DataLoader(valid_ds, shuffle=True, batch_size= batch_size, drop_last=True)
     loss_fn = torch.nn.functional.binary_cross_entropy_with_logits
