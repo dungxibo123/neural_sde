@@ -131,7 +131,8 @@ def main(ds_len, train_ds, valid_ds = None, model_type = "sde", data_name = "mni
     # START THE MAIN PART
 ########################################################################################################################
     print("Spliting dataset") 
-    train_ds, valid_ds, _ = random_split(train_ds, lengths = [train_num, valid_num, test_num]) 
+    if valid_ds is None:
+        train_ds, valid_ds, _ = random_split(train_ds, lengths = [train_num, valid_num, test_num]) 
     train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size, drop_last=True)
     val_loader  = DataLoader(valid_ds, shuffle=True, batch_size= batch_size, drop_last=True)
     loss_fn = torch.nn.functional.binary_cross_entropy_with_logits

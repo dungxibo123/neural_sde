@@ -208,7 +208,7 @@ SDENet: fe -> SDEBlock -> fcc
     
 class SDENet(Model):
     def __init__(self, input_channel, input_size, state_size, brownian_size, batch_size, option = dict(), method="euler",
-        noise_type="general", integral_type="ito", device = "cpu", is_ode=False,parallel = False, layers ="linear"):
+        noise_type="general", integral_type="ito", device = "cpu", is_ode=False,parallel = False, layers ="conv"):
         """"""""""""""""""""""""
         super(SDENet, self).__init__()
         self.batch_size = batch_size
@@ -229,8 +229,8 @@ class SDENet(Model):
             nn.Conv2d(32,64,3,2),
             nn.GroupNorm(32,64),
             nn.ReLU(),
-            nn.Flatten(),
         ]).to(device)
+        self.flat = nn.Flatten()
         state_size, input_conv_channel, input_conv_size = self.get_state_size()
         self.input_conv_channel = input_conv_channel
         self.input_conv_size = input_conv_size
@@ -257,18 +257,18 @@ class SDENet(Model):
                 layers=self.layers
             ).to(device)
 
-        if self.layers == "conv":
-            self.fcc = nn.Sequential(*[
-                nn.AdaptiveAvgPool2d(1),
-                nn.Flatten(),
-                nn.Linear(input_conv_channel,10),
-                nn.Softmax(dim = 1)
-            ]).to(device)
-        else:
-            self.fcc = nn.Sequential(*[
-                nn.Linear(self.state_size,10),
-                nn.Softmax(dim = 1)
-            ]).to(device)
+#        if self.layers == "conv":
+#            self.fcc = nn.Sequential(*[
+#                nn.AdaptiveAvgPool2d(1),
+#                nn.Flatten(),
+#                nn.Linear(input_conv_channel,10),
+#                nn.Softmax(dim = 1)
+#            ]).to(device)
+#        else:
+        self.fcc = nn.Sequential(*[
+            nn.Linear(self.state_size,10),
+            nn.Softmax(dim = 1)
+        ]).to(device)
             
 
         self.intergrated_time = torch.Tensor([0.0,1.0]).to(device)
@@ -284,14 +284,15 @@ class SDENet(Model):
     def forward(self,x):
         out = self.fe(x)
         bs = x.shape[0]
+        out = self.flat(out)
 #        print(f"Shape after Feature Extraction Layer: {out.shape}")
 #        out = self.flat(out)
 #        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
-        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.1, dt_min=0.05,adaptive=True)[-1]
-        if self.layers == "conv":
-            out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
+        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.25)[-1]
+#        if self.layers == "conv":
+#            out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
         out = self.fcc(out)
         return out
 
