@@ -188,7 +188,7 @@ class SDEBlock(nn.Module):
     def g(self,t,x):
         bs = x.shape[0]
         if self.is_ode:
-            out =  torch.zeros_like((self.batch_size,self.state_size, self.brownian_size)).to(self.device)
+            out =  torch.zeros((bs, self.state_size, self.brownian_size)).to(self.device)
             return out
         out = self.diffusion(t,x)
         
@@ -220,10 +220,10 @@ class SDENet(Model):
         #state_size = 64 * 14 * 14
         self.device = device
         self.fe = nn.Sequential(*[
-            nn.Conv2d(input_channel,16,3,padding=1),
+            nn.Conv2d(input_channel,16,3,1),
             nn.GroupNorm(8,16),
             nn.ReLU(),
-            nn.Conv2d(16,32,5,2),
+            nn.Conv2d(16,32,3,2),
             nn.GroupNorm(16,32),
             nn.ReLU(),
             nn.Conv2d(32,64,3,2),
@@ -266,7 +266,8 @@ class SDENet(Model):
 #            ]).to(device)
 #        else:
         self.fcc = nn.Sequential(*[
-            nn.Linear(self.state_size,10),
+            nn.Linear(self.state_size,32),
+            nn.Linear(32,10),
             nn.Softmax(dim = 1)
         ])
             
@@ -290,7 +291,7 @@ class SDENet(Model):
 #        print(f"After the feature extraction step, shape is: {out.shape}")
 #        print(f"Device of out {out.device}")
 #        print(f"Shape before the SDE Intergral: {out.shape}")
-        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.2)[-1]
+        out = sdeint(self.rm,out,self.intergrated_time, options=self.option,method="euler", atol=5e-2,rtol=5e-2, dt=0.05, adaptive=True)[-1]
 #        if self.layers == "conv":
 #            out = out.view(bs,self.input_conv_channel, self.input_conv_size, self.input_conv_size)
         out = self.fcc(out)
@@ -315,7 +316,7 @@ class SDENet(Model):
 # Test 4
 if __name__ == "__main__":
     import time
-    sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=256,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
+    sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=256,device="cuda", parallel=False,is_ode=True, option=dict(step_size=0.1)).to("cuda")
     bz = 1024
     u = torch.rand((bz,3,32,32)).to("cuda")
     out = sde(u)

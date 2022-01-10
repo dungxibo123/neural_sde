@@ -33,6 +33,7 @@ parser.add_argument("-nt", "--noise-type", type=str, default="general", help="Ty
 parser.add_argument("-it", "--integral-type", type=str, default="ito", help="Ito or Stratonovich intergral")
 parser.add_argument("-so", "--solver", type=str, default="euler", help="Solver")
 parser.add_argument("-rlr", "--reduce-lr",type=float, default=0.1, help="Reduce On Plateau")
+parser.add_argument("-ode", "--is-ode", type=bool, default=False, help="Run as ODE")
 args = parser.parse_args()
 
 
@@ -59,6 +60,7 @@ SOLVER=args.solver
 BROWNIAN_SIZE=args.brownian_size
 NOISE_TYPE=args.noise_type
 WEIGHT_DECAY=args.weight_decay
+IS_ODE=args.is_ode
 
 
 
@@ -127,13 +129,13 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
 
 def main(ds_len, train_ds, valid_ds = None, model_type = "sde", data_name = "mnist_50", batch_size=32, epochs=100, lr=1e-3,
     train_num = 0, valid_num = 0, test_num = 0, weight_decay=0,reduce_lr = None, device="cpu", result_dir="./result", model_dir="./model",
-    integral_type="ito", brownian_size=2, noise_type="general",solver="euler", parallel=None, option=dict()):
+    integral_type="ito", brownian_size=2, noise_type="general",solver="euler", parallel=None, is_ode=False, option=dict()):
     # START THE MAIN PART
 ########################################################################################################################
     print("Spliting dataset") 
-    train_ds, valid_ds, _ = random_split(train_ds, lengths = [train_num, valid_num, test_num]) 
-    train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size, drop_last=True)
-    val_loader  = DataLoader(valid_ds, shuffle=True, batch_size= batch_size, drop_last=True)
+    train_ds, valid_ds , _ = random_split(train_ds, lengths = [train_num, valid_num, test_num]) 
+    train_loader = DataLoader(train_ds, shuffle=True, batch_size=batch_size, drop_last=False)
+    val_loader  = DataLoader(valid_ds, shuffle=True, batch_size= batch_size, drop_last=False)
     loss_fn = torch.nn.functional.binary_cross_entropy_with_logits
     #    epochs= int(epochs * 2.5)
     print("Creating model")
@@ -145,7 +147,8 @@ def main(ds_len, train_ds, valid_ds = None, model_type = "sde", data_name = "mni
         batch_size=batch_size,
         option=option,
         parallel=parallel,
-        device=device
+        device=device,
+        is_ode=is_ode
     ).to(device)
     if parallel:
         model = nn.DataParallel(model).to(device)
@@ -182,7 +185,7 @@ elif DATA_TYPE=="svhn":
 ds_len_, ds_ = preprocess_data(DATA,data_type=DATA_TYPE,device=device, sigma=None)
 _, perturbed_ds_ = preprocess_data(DATA,data_type=DATA_TYPE, device=device, sigma=[15.])
 sde_model = main( ds_len_, ds_, perturbed_ds_, device=device, model_type="sde", data_name=f"svhn_origin", batch_size=BATCH_SIZE, 
-    epochs=EPOCHS, train_num=TRAIN_NUM, valid_num=VALID_NUM, test_num=TEST_NUM, result_dir=RESULT_DIR, parallel=PARALLEL, integral_type=INTEGRAL_TYPE, solver=SOLVER, noise_type=NOISE_TYPE, weight_decay=WEIGHT_DECAY, brownian_size=BROWNIAN_SIZE)
+    epochs=EPOCHS, train_num=TRAIN_NUM, valid_num=VALID_NUM, test_num=TEST_NUM, result_dir=RESULT_DIR, parallel=PARALLEL, integral_type=INTEGRAL_TYPE, solver=SOLVER, noise_type=NOISE_TYPE, weight_decay=WEIGHT_DECAY, brownian_size=BROWNIAN_SIZE, is_ode=IS_ODE)
 
 sigmas = [10.0, 15.0 , 20.0]
 loaders = [(key,DataLoader(preprocess_data(DATA, sigma=[key], device=device, train=True)[1], batch_size=args.batch_size,drop_last=True)) for key in sigmas]
