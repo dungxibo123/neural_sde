@@ -1,5 +1,5 @@
 # bin/sh
 
-python3 run.py --epoch 125 --data svhn --batch-size 3136 --is-ode true --device cuda > "outputs/log_svhn_125e_3136ba_ode.log"
-python3 run.py --epoch 125 --data cifar10 --batch-size 3136 --is-ode true --device cuda > "outputs/log_cifar10_125e_3136ba_ode.log"
+python3 run.py --epoch 200 --data svhn --batch-size 8192 --is-ode true --device cuda > "outputs/log_svhn_200e_8192ba_ode_extend.log"
+python3 run.py --epoch 200 --data cifar10 --batch-size 8192 --is-ode true --device cuda > "outputs/log_cifar10_200e_8192ba_ode_extend.log"
 

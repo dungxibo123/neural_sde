@@ -98,10 +98,10 @@ class ConvolutionDrift(nn.Module):
         super(ConvolutionDrift,self).__init__()
         self.size=size
         self.in_channel=in_channel
-        self.conv1 = ConcatConv2d(in_channel, 64, ksize=3,padding=1)
-        self.norm1 = Norm(64) 
+        self.conv1 = ConcatConv2d(in_channel, 128, ksize=3,padding=1)
+        self.norm1 = Norm(128) 
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = ConcatConv2d(64, 64, ksize=3, padding=1)
+        self.conv2 = ConcatConv2d(128, in_channel, ksize=3, padding=1)
         self.norm2 = Norm(in_channel) 
         
     def forward(self,t,x):
@@ -133,11 +133,11 @@ class ConvolutionDiffusion(nn.Module):
 #            
 #        ]).to(device)
         self.relu = nn.ReLU()
-        self.norm1 = Norm(64)
-        self.conv1 = ConcatConv2d(in_channel, 64, ksize=3, padding = 1)
-        self.conv2 = ConcatConv2d(64,64, ksize=3, padding = 1)
-        self.norm2 = Norm(64)
-        self.conv3 = ConcatConv2d(64, in_channel * brownian_size, ksize = 3, padding = 1)
+        self.norm1 = Norm(128)
+        self.conv1 = ConcatConv2d(in_channel, 128, ksize=3, padding = 1)
+        self.conv2 = ConcatConv2d(128,128, ksize=3, padding = 1)
+        self.norm2 = Norm(128)
+        self.conv3 = ConcatConv2d(128, in_channel * brownian_size, ksize = 3, padding = 1)
         self.norm3 = Norm(in_channel * brownian_size)
     def forward(self,t,x):
         bs = x.shape[0]
@@ -220,10 +220,10 @@ class SDENet(Model):
         #state_size = 64 * 14 * 14
         self.device = device
         self.fe = nn.Sequential(*[
-            nn.Conv2d(input_channel,16,3,1),
-            nn.GroupNorm(8,16),
+            nn.Conv2d(input_channel,64,3,1),
+            nn.GroupNorm(16,64),
             nn.ReLU(),
-            nn.Conv2d(16,32,3,2),
+            nn.Conv2d(64,32,3,2),
             nn.GroupNorm(16,32),
             nn.ReLU(),
             nn.Conv2d(32,64,3,2),
