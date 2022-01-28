@@ -98,10 +98,10 @@ class ConvolutionDrift(nn.Module):
         super(ConvolutionDrift,self).__init__()
         self.size=size
         self.in_channel=in_channel
-        self.conv1 = ConcatConv2d(in_channel, 128, ksize=3,padding=1)
-        self.norm1 = Norm(128) 
+        self.conv1 = ConcatConv2d(in_channel, in_channel, ksize=3,padding=1)
+        self.norm1 = Norm(in_channel) 
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = ConcatConv2d(128, in_channel, ksize=3, padding=1)
+        self.conv2 = ConcatConv2d(in_channel, in_channel, ksize=3, padding=1)
         self.norm2 = Norm(in_channel) 
         
     def forward(self,t,x):
@@ -133,11 +133,11 @@ class ConvolutionDiffusion(nn.Module):
 #            
 #        ]).to(device)
         self.relu = nn.ReLU()
-        self.norm1 = Norm(128)
-        self.conv1 = ConcatConv2d(in_channel, 128, ksize=3, padding = 1)
-        self.conv2 = ConcatConv2d(128,128, ksize=3, padding = 1)
-        self.norm2 = Norm(128)
-        self.conv3 = ConcatConv2d(128, in_channel * brownian_size, ksize = 3, padding = 1)
+        self.norm1 = Norm(in_channel)
+        self.conv1 = ConcatConv2d(in_channel, in_channel, ksize=3, padding = 1)
+        self.conv2 = ConcatConv2d(in_channel, in_channel, ksize=3, padding = 1)
+        self.norm2 = Norm(in_channel)
+        self.conv3 = ConcatConv2d(in_channel, in_channel * brownian_size, ksize = 3, padding = 1)
         self.norm3 = Norm(in_channel * brownian_size)
     def forward(self,t,x):
         bs = x.shape[0]
@@ -193,6 +193,7 @@ class SDEBlock(nn.Module):
         out = self.diffusion(t,x)
         
         out =  out.view(bs, self.state_size, self.brownian_size)
+        #out =  out.view(bs, self.state_size)
         return out
 
         
@@ -300,14 +301,14 @@ class SDENet(Model):
 
 
 # Test
-#sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
+#sde = SDENet(input_channel=3,input_size=32,state_size=in_channel,brownian_size=2,batch_size=32,device="cuda", parallel=False,option=dict(step_size=0.1)).to("cuda")
 #data = torch.rand((32,3,32,32)).to("cuda")
 #print(sde(data).shape)
 
 
 # Test 2
 #f = LinearDrift(2304,16)
-#print(f(torch.rand(128,2304)).shape) # OK, SHAPE: [32,16]
+#print(f(torch.rand(in_channel,2304)).shape) # OK, SHAPE: [32,16]
 #g = LinearDiffusion2304,16 * 3)
 #print(g(torch.rand(32,2304)).shape) # OK, SHAPE: [32,48]
 
@@ -316,7 +317,7 @@ class SDENet(Model):
 # Test 4
 if __name__ == "__main__":
     import time
-    sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=2,batch_size=256,device="cuda", parallel=False,is_ode=True, option=dict(step_size=0.1)).to("cuda")
+    sde = SDENet(input_channel=3,input_size=32,state_size=128,brownian_size=1,batch_size=1024, noise_type='general', device="cuda", parallel=False,is_ode=True, option=dict(step_size=0.1)).to("cuda")
     bz = 1024
     u = torch.rand((bz,3,32,32)).to("cuda")
     out = sde(u)

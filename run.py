@@ -65,11 +65,12 @@ IS_ODE=args.is_ode
 
 
 def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None, epochs=100, parallel=None):
-    print(model.eval())
+    print(model)
     print(f"> Numbers of parameters in model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     best_model, best_acc, best_epoch = None, 0, 0
     history = {"loss": [], "acc": [], "val_loss": [], "val_acc": []}
     for epoch_id in tqdm(range(epochs)):
+        model.train()
         total = 0
         correct = 0
         running_loss = 0
@@ -100,8 +101,10 @@ def train(model, optimizer, train_loader, val_loader,loss_fn, lr_scheduler=None,
         history["acc"].append(acc)
         history["loss"].append(running_loss)
         if parallel:
+            model.module.eval()
             val_loss, val_acc = model.module.evaluate(val_loader)
         else:
+            model.eval()
             val_loss, val_acc = model.evaluate(val_loader)
         if val_acc > best_acc and val_acc > 0:
             best_acc = val_acc
